@@ -79,6 +79,10 @@ func get_request(c echo.Context) error {
 
 func delete_request(c echo.Context) error {
 	id := c.Param("id")
+	if id == "" {
+		error_response := json_error{Err: nil, Message: "There was an error"}
+		return c.JSON(http.StatusBadRequest, error_response)
+	}
 	b := new(blog)
 	err := database.QueryRow("SELECT id, title, body FROM blog_entry WHERE id=?", id).Scan(&b.Id, &b.Title, &b.Body)
 	if err != nil {
