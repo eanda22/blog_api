@@ -44,8 +44,6 @@ func main() {
 	e.PUT("/post/:id", put_request)
 
 	e.Start(":8080")
-
-	fmt.Println("Hello")
 }
 
 func post_request(c echo.Context) error {
