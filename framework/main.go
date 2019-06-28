@@ -24,6 +24,8 @@ type json_error struct {
 var all_blogs []blog
 var database *sql.DB
 
+var error_response = json_error{Err: nil, Message: "There was an error"}
+
 func main() {
 	fmt.Println("Hello, World!")
 	var err error
@@ -50,8 +52,7 @@ func post_request(c echo.Context) error {
 	b := new(blog)
 	err := c.Bind(b)
 	if err != nil {
-		log.Fatal(err)
-		error_response := json_error{Err: err, Message: "There was an error"}
+		error_response.Err = err
 		return c.JSON(http.StatusBadRequest, error_response)
 	}
 	add_entry(b.Id, b.Title, b.Body)
@@ -61,9 +62,8 @@ func post_request(c echo.Context) error {
 func get_request(c echo.Context) error {
 	all_blogs = nil
 	rows, err := database.Query("SELECT id, title, body FROM blog_entry")
-	error_response := json_error{Err: err, Message: "There was an error"}
 	if err != nil {
-		log.Fatal(err)
+		error_response.Err = err
 		return c.JSON(http.StatusNotFound, error_response)
 	}
 	var blog_id, blog_title, blog_body string
@@ -79,15 +79,13 @@ func get_request(c echo.Context) error {
 
 func delete_request(c echo.Context) error {
 	id := c.Param("id")
-	if id == "" {
-		error_response := json_error{Err: nil, Message: "There was an error"}
-		return c.JSON(http.StatusBadRequest, error_response)
+	if !rowExists("SELECT id FROM blog_entry WHERE id=?", id) {
+		return c.JSON(http.StatusNotFound, error_response)
 	}
 	b := new(blog)
 	err := database.QueryRow("SELECT id, title, body FROM blog_entry WHERE id=?", id).Scan(&b.Id, &b.Title, &b.Body)
 	if err != nil {
-		log.Fatal(err)
-		error_response := json_error{Err: err, Message: "There was an error"}
+		error_response.Err = err
 		return c.JSON(http.StatusInternalServerError, error_response)
 	}
 	delete_entry(id)
@@ -96,21 +94,19 @@ func delete_request(c echo.Context) error {
 
 func put_request(c echo.Context) error {
 	id := c.Param("id")
-	if id == "" {
-		error_response := json_error{Err: nil, Message: "There was an error"}
-		return c.JSON(http.StatusBadRequest, error_response)
+	if !rowExists("SELECT id FROM blog_entry WHERE id=?", id) {
+		error_response.Err = sql.ErrNoRows
+		return c.JSON(http.StatusNotFound, error_response)
 	}
 	b := new(blog)
 	err := c.Bind(b)
 	if err != nil {
-		log.Fatal(err)
-		error_response := json_error{Err: err, Message: "There was an error"}
+		error_response.Err = err
 		return c.JSON(http.StatusInternalServerError, error_response)
 	}
 	statement, err := database.Prepare("UPDATE blog_entry SET title=?, body=? WHERE id=?")
 	if err != nil {
-		log.Fatal(err)
-		error_response := json_error{Err: err, Message: "There was an error"}
+		error_response.Err = err
 		return c.JSON(http.StatusNotFound, error_response)
 	}
 	statement.Exec(b.Title, b.Body, id)
@@ -133,4 +129,14 @@ func delete_entry(blog_id string) {
 	}
 	statement.Exec(blog_id)
 	log.Println("deleted")
+}
+
+func rowExists(query string, args ...interface{}) bool {
+	var exists bool
+	query = fmt.Sprintf("SELECT exists (%s)", query)
+	err := database.QueryRow(query, args...).Scan(&exists)
+	if err != nil {
+		log.Fatal(err)
+	}
+	return exists
 }
